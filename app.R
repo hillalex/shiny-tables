@@ -6,11 +6,7 @@ source("server.R")
 
 ui <- dashboardPage(dashboardHeader(disable = T),
               dashboardSidebar(disable = T),
-              dashboardBody(uiOutput("MainBody")
-                            
-                            )
-              
-)
+              dashboardBody(uiOutput("MainBody")))
 
 app <- shinyApp(ui = ui, server = server)
 options(shiny.autoreload=TRUE)

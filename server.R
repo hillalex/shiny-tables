@@ -7,9 +7,10 @@ library(first90)
 library(rhandsontable)
 
 server <- function(input, output) {
-    vals <- reactiveValues()
 
     data(survey_hts)
+
+    values = reactiveValues()
 
     dat <- survey_hts[country == "Malawi" &
         hivstatus == "all" &
@@ -17,73 +18,69 @@ server <- function(input, output) {
         sex == "both" &
         outcome == "evertest"]
 
-    vals$table_data = as.data.frame(dat)
+    table_data = as.data.frame(dat)
 
-    getData = reactive({
-        if (!is.null(input$hot)) {
-            DF = hot_to_r(input$hot)
-        } else {
-            DF = dat
-        }
-        DF
-    })
+    values$table_data = table_data
+
+    text_renderer = "function (instance, td, row, col, prop, value, cellProperties) {
+        Handsontable.renderers.TextRenderer.apply(this, arguments);
+        td.style.textAlign = 'right';
+    }"
 
     output$hot <- renderRHandsontable({
-        DF = getData()
-        if (!is.null(DF)) {
-            rhandsontable(DF, stretchH = "all")
-        }
+            rhandsontable(values$table_data, stretchH = "all") %>%
+                hot_col("outcome", allowInvalid = TRUE) %>%
+                hot_col("agegr", allowInvalid = TRUE)  %>%
+                hot_col("est", renderer=text_renderer) %>%
+                hot_col("se", renderer=text_renderer) %>%
+                hot_col("ci_l", renderer=text_renderer) %>%
+                hot_col("ci_u", renderer=text_renderer) %>%
+                hot_col("year", format="0")
     })
+
 
     output$MainBody <- renderUI({
         fluidPage(
+            includeCSS("style.css"),
             box(width = 12,
-                h3(strong("Actions on datatable with buttons"), align = "center"),
+                h3(strong("Handsontable example"), align = "center"),
                 hr(),
-                column(6, offset = 6,
-                    HTML('<div class="btn-group" role="group" aria-label="Basic example">'),
-                            actionButton(inputId = "add", label = "Add a new row"),
-                            actionButton(inputId = "del", label = "Delete selected rows"),
-                    HTML('</div>')
-                ),
-                column(12, dataTableOutput("Main_table"))
-            ),
-            box(width = 12,
-                column(12, rHandsontableOutput("hot")))
+                column(12, rHandsontableOutput("hot"),
+                        fluidRow(
+                            column(6,
+                                downloadButton("downloadTemplate", "Download template"),
+                                fileInput("file1", "Upload CSV",
+                                        accept = c("text/csv", "text/comma-separated-values,text/plain", ".csv"))
+                            )
+                        )
+                )
+            )
         )
     })
 
-    output$Main_table <- renderDT(vals$table_data, editable = TRUE)
+    output$downloadTemplate <- downloadHandler(
+            filename = "template.csv",
+            content = function(file) {
+                matrix_template <- matrix(c(rep.int(NA,length(values$table_data))),nrow=1,ncol=length(dat))
 
-    proxy = dataTableProxy('Main_table')
+                # make it a data.frame and give cols the same names as data
+                template <- data.frame(matrix_template)
+                colnames(template) <- colnames(values$table_data)
+                write.csv(template, file, row.names = FALSE, na = "")
+            }
+    )
 
-    observeEvent(input$Main_table_cell_edit, {
-        info = input$Main_table_cell_edit
-        str(info)
-        i = info$row
-        j = info$col
-        v = info$value
+    observeEvent(input$file1, {
+        inFile <- input$file1
 
-        vals$table_data[i, j] <<- DT::coerceValue(v, vals$table_data[i, j])
-        replaceData(proxy, vals$table_data, resetPaging = FALSE)  # important
+        if (is.null(inFile))
+            return(NULL)
+
+        values$table_data <<- read.csv(inFile$datapath)
     })
 
-    observeEvent(input$del, {
-        str(input$Main_table_rows_selected)
-        str(vals$table_data)
-        vals$table_data <- vals$table_data[-c(input$Main_table_rows_selected), ]
-        replaceData(proxy, vals$table_data, resetPaging = FALSE)  # important
+    observe({
+        if(!is.null(input$hot))
+            values$table_data <- hot_to_r(input$hot)
     })
-
-    observeEvent(input$add, {
-        temprow <- matrix(c(rep.int(NA,length(dat))),nrow=1,ncol=length(dat))
-
-        # make it a data.frame and give cols the same names as data
-        newrow <- data.frame(temprow)
-        colnames(newrow) <- colnames(dat)
-
-        vals$table_data <- rbind(vals$table_data,newrow)
-        replaceData(proxy, vals$table_data, resetPaging = FALSE)  # important
-    })
-
 }
